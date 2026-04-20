@@ -1,7 +1,6 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useEventListener, useMountEffect, useUnmountEffect } from 'primereact/hooks';
 import React, { useContext, useEffect, useRef } from 'react';
 import { classNames } from 'primereact/utils';
@@ -19,6 +18,11 @@ const Layout = ({ children }: ChildContainerProps) => {
     const { setRipple } = useContext(PrimeReactContext);
     const topbarRef = useRef<AppTopbarRef>(null);
     const sidebarRef = useRef<HTMLDivElement>(null);
+
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const isLoginPage = pathname === '/pages/authen/login';
+    
     const [bindMenuOutsideClickListener, unbindMenuOutsideClickListener] = useEventListener({
         type: 'click',
         listener: (event) => {
@@ -35,8 +39,6 @@ const Layout = ({ children }: ChildContainerProps) => {
         }
     });
 
-    const pathname = usePathname();
-    const searchParams = useSearchParams();
     useEffect(() => {
         hideMenu();
         hideProfileMenu();
@@ -121,6 +123,17 @@ const Layout = ({ children }: ChildContainerProps) => {
         'p-input-filled': layoutConfig.inputStyle === 'filled',
         'p-ripple-disabled': !layoutConfig.ripple
     });
+
+    if (isLoginPage) {
+        return (
+            <React.Fragment>
+                <div className="login-layout">
+                    {children}
+                </div>
+                <AppConfig />
+            </React.Fragment>
+        );
+    }
 
     return (
         <React.Fragment>
