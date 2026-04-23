@@ -1,18 +1,17 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { classNames } from 'primereact/utils';
 import React, { forwardRef, useContext, useImperativeHandle, useRef } from 'react';
 import { AppTopbarRef } from '@/types';
 import { LayoutContext } from './context/layoutcontext';
+import { signOut } from 'next-auth/react';
 
 const AppTopbar = forwardRef<AppTopbarRef>((props, ref) => {
-    const { layoutConfig, layoutState, onMenuToggle, showProfileSidebar } = useContext(LayoutContext);
+    const { layoutState, onMenuToggle, showProfileSidebar } = useContext(LayoutContext);
     const menubuttonRef = useRef(null);
     const topbarmenuRef = useRef(null);
     const topbarmenubuttonRef = useRef(null);
-    const router = useRouter();
 
     useImperativeHandle(ref, () => ({
         menubutton: menubuttonRef.current,
@@ -22,14 +21,13 @@ const AppTopbar = forwardRef<AppTopbarRef>((props, ref) => {
 
     const onLogout = async () => {
         try {
-            await fetch('/api/auth/logout', { 
-                method: 'POST' 
+            await signOut({ 
+                callbackUrl: '/pages/authen/login',
+                redirect: true 
             });
-
-            localStorage.clear();
-            router.push('/authen/login');
             
-            router.refresh();
+            localStorage.clear(); 
+            
         } catch (error) {
             console.error("Logout failed:", error);
         }
@@ -51,10 +49,12 @@ const AppTopbar = forwardRef<AppTopbarRef>((props, ref) => {
             </button>
 
             <div ref={topbarmenuRef} className={classNames('layout-topbar-menu', { 'layout-topbar-menu-mobile-active': layoutState.profileSidebarVisible })}>
-                <button type="button" className="p-link layout-topbar-button">
-                    <i className="pi pi-user"></i>
-                    <span>Profile</span>
-                </button>
+                <Link href="/pages/profile">
+                    <button type="button" className="p-link layout-topbar-button">
+                        <i className="pi pi-user"></i>
+                        <span>Profile</span>
+                    </button>
+                </Link>
                 
                 <button type="button" className="p-link layout-topbar-button" onClick={onLogout}>
                     <i className="pi pi-sign-out"></i>

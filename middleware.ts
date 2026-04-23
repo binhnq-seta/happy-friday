@@ -1,27 +1,37 @@
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { withAuth } from "next-auth/middleware";
+import { NextResponse } from "next/server";
 
-export function middleware(request: NextRequest) {
-    const session = request.cookies.get('session');
-    const { pathname } = request.nextUrl;
+export default withAuth(
+    function middleware(req) {
+        const token = req.nextauth.token;
+        const { pathname } = req.nextUrl;
+        const isAuthPage = pathname === '/pages/authen/login';
 
-    // IMPORTANT: Pathname in Next.js always starts with /
-    // If your folder is app/authen/login/page.tsx, the pathname is /authen/login
-    const isAuthPage = pathname === '/pages/authen/login';
+        if (token && isAuthPage) {
+            return NextResponse.redirect(new URL('/', req.url));
+        }
 
-    // 1. If NO session and NOT on login page -> Redirect to /authen/login
-    if (!session && !isAuthPage) {
-        return NextResponse.redirect(new URL('/pages/authen/login', request.url));
+        return NextResponse.next();
+    },
+    {
+        callbacks: {
+            authorized: ({ token, req }) => {
+                const { pathname } = req.nextUrl;
+                
+                if (pathname === '/pages/authen/login') {
+                    return true;
+                }
+
+                return !!token;
+            },
+        },
+        pages: {
+            signIn: '/pages/authen/login',
+        },
     }
-
-    if (session && isAuthPage) {
-        return NextResponse.redirect(new URL('/', request.url));
-    }
-
-    return NextResponse.next();
-}
+);
 
 export const config = {
-    // This matcher excludes all assets so they don't trigger redirects
+    // Keep your same matcher to exclude static assets and internal Next.js files
     matcher: ['/((?!api|_next/static|_next/image|favicon.ico|layout|themes|demo).*)'],
 };
