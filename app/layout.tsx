@@ -1,4 +1,5 @@
 'use client';
+import { SessionProvider } from "next-auth/react";
 import { LayoutProvider } from '../layout/context/layoutcontext';
 import { PrimeReactProvider } from 'primereact/api';
 import 'primereact/resources/primereact.css';
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: RootLayoutProps) {
             </head>
             <body>
                 <PrimeReactProvider>
-                    <LayoutProvider>{children}</LayoutProvider>
+                    <SessionProvider>
+                        <LayoutProvider>{children}</LayoutProvider>
+                    </SessionProvider>
                 </PrimeReactProvider>
             </body>
         </html>
