@@ -361,16 +361,16 @@ const HistoryPage = () => {
                             </div>
                         </div>
                     ))
-                ) : (
+                ) : !isLoading ? (
                     <div className="col-12">
                         <div className="surface-card shadow-1 border-round p-5 text-center">
                             <div className="text-900 text-xl font-bold mb-3">Không có dữ liệu</div>
                             <div className="text-600">Hiện chưa có lịch sử phù hợp với bộ lọc.</div>
                         </div>
                     </div>
-                )}
+                ) : null}
 
-                {filteredHistory.length > 0 && (
+                {!isLoading && filteredHistory.length > 0 && (
                     <div className="col-12">
                         <Paginator
                             first={first}
@@ -384,6 +384,21 @@ const HistoryPage = () => {
                     </div>
                 )}
             </div>
+
+            {isLoading && (
+                <div
+                    className="flex align-items-center justify-content-center"
+                    style={{
+                        position: 'fixed',
+                        inset: 0,
+                        backgroundColor: 'rgba(128, 128, 128, 0.35)',
+                        backdropFilter: 'blur(1px)',
+                        zIndex: 1200
+                    }}
+                >
+                    <ProgressSpinner style={{ width: '64px', height: '64px' }} strokeWidth="5" />
+                </div>
+            )}
 
             <Dialog
                 header="Xác nhận xóa"
