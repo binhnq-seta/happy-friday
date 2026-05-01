@@ -1,11 +1,11 @@
-import NextAuth from "next-auth";
+import NextAuth, { type AuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { connectDB } from '@/app/database/mongodb';
 import User from '@/app/models/User';
 import bcrypt from "bcryptjs";
 
-export const authOptions = {
+export const authOptions: AuthOptions = {
     providers: [
         GoogleProvider({
             clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -73,7 +73,7 @@ export const authOptions = {
         },
         async session({ session, token }) {
             if (session.user) {
-                session.user.id = (token as any).id || token.sub;
+                (session.user as any).id = (token as any).id || token.sub;
             }
             return session;
         },
