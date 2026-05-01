@@ -13,9 +13,9 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         await connectDB();
-
+debugger
         const body = await request.json();
-        const { date, foodType, payer, total, participants, amounts } = body;
+        const { date, foodType, payer, total, participants, amounts, auditUserId } = body;
 
         // Validate required fields
         if (!date || !foodType || !payer || !total) {
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
         // Find payer user by ID or name
         let payerUser = null;
         let payerName = null;
-        
+
         if (typeof payer === 'object' && payer._id) {
             payerUser = await User.findById(payer._id);
             payerName = payer.Name;
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
                 // Treat as name
                 payerUser = await User.findOne({ Name: payer });
                 payerName = payer;
-                
+
                 // Create if not found
                 if (!payerUser && payerName) {
                     payerUser = await User.create({ Name: payerName, isActive: true });
@@ -71,14 +71,14 @@ export async function POST(request: Request) {
         }
 
         let foodTypeDoc = null;
-        
+
         // Check if foodType is an ID (ObjectId format)
         if (typeof foodType === 'string' && foodType.match(/^[0-9a-fA-F]{24}$/)) {
             foodTypeDoc = await FoodType.findById(foodType);
         } else if (typeof foodType === 'string') {
             // foodType is a name, try to find it
             foodTypeDoc = await FoodType.findOne({ name: foodType });
-            
+
             // Create if not found
             if (!foodTypeDoc) {
                 foodTypeDoc = await FoodType.create({ name: foodType, isActive: true });
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
             for (const participant of participants) {
                 let participantUser = null;
                 let participantName = null;
-                
+
                 // Check if participant is an object with _id (from frontend)
                 if (typeof participant === 'object' && participant._id) {
                     participantUser = await User.findById(participant._id);
@@ -107,32 +107,40 @@ export async function POST(request: Request) {
                     // participant is a name string
                     participantUser = await User.findOne({ Name: participant });
                     participantName = participant;
-                } else if (typeof participant === 'object' && participant.Name) {
-                    // participant is an object with Name property
-                    participantUser = await User.findOne({ Name: participant.Name });
-                    participantName = participant.Name;
+                } else if (typeof participant === 'object' && (participant.Name || participant.name)) {
+                    // participant is an object with Name or name property (both cases)
+                    const pName = participant.Name || participant.name;
+                    participantUser = await User.findOne({ Name: pName });
+                    participantName = pName;
                 }
-                
+
                 // Create participant if not found
                 if (!participantUser && participantName) {
                     participantUser = await User.create({ Name: participantName, isActive: true });
                 }
-                
+
                 if (participantUser) {
-                    // Get the amount - handle both object and string keys
+                    // Get the amount - prefer participant.amount if provided (object), else use amounts map
                     let amount = 0;
-                    if (amounts) {
+                    if (typeof participant === 'object' && (participant.amount || participant.amount === 0)) {
+                        amount = Number(participant.amount || 0);
+                    } else if (amounts) {
                         if (participantName) {
                             amount = amounts[participantName] || 0;
                         } else if (typeof participant === 'string') {
                             amount = amounts[participant] || 0;
                         }
                     }
-                    
+
+                    // Preserve isPaid/ownerConfirm if provided in participant object, otherwise default
+                    const isPaidFlag = typeof participant === 'object' && 'isPaid' in participant ? Boolean(participant.isPaid) : false;
+                    const ownerConfirmFlag = typeof participant === 'object' && 'ownerConfirm' in participant ? Boolean(participant.ownerConfirm) : false;
+
                     participantsList.push({
                         user: participantUser._id,
                         amount: amount,
-                        isPaid: false
+                        isPaid: isPaidFlag,
+                        ownerConfirm: ownerConfirmFlag
                     });
                 }
             }
@@ -145,7 +153,11 @@ export async function POST(request: Request) {
             foodType: foodTypeDoc._id,
             total: Number(total),
             participants: participantsList,
-            isPaid: false
+            isPaid: false,
+            createdBy: auditUserId || payerUser._id,
+            updatedBy: auditUserId || payerUser._id,
+            createdOn: new Date(),
+            updatedOn: new Date()
         });
 
         const savedHistory = await newHistory.save();

@@ -44,19 +44,22 @@ const HistoryPage = () => {
     };
 
     const [history, setHistory] = useState<any[]>([]);
-    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+    const [selectedDate, setSelectedDate] = useState<Date[] | null>(null);
     const [isLoading, setIsLoading] = useState(false);
-    const filteredHistory = selectedDate
+    const filteredHistory = selectedDate?.[0]
         ? history.filter((item) => {
             const itemDate = item?.date ? new Date(item.date) : null;
             if (!itemDate || isNaN(itemDate.getTime())) {
                 return false;
             }
-            return (
-                itemDate.getFullYear() === selectedDate.getFullYear() &&
-                itemDate.getMonth() === selectedDate.getMonth() &&
-                itemDate.getDate() === selectedDate.getDate()
-            );
+
+            const start = new Date(selectedDate[0]);
+            start.setHours(0, 0, 0, 0);
+
+            const end = selectedDate[1] ? new Date(selectedDate[1]) : new Date(selectedDate[0]);
+            end.setHours(23, 59, 59, 999);
+
+            return itemDate >= start && itemDate <= end;
         })
         : history;
     const displayedHistory = filteredHistory.slice(first, first + rows);
@@ -117,6 +120,7 @@ const HistoryPage = () => {
     const handleTogglePaid = async (historyId: string, participantUserId: string, currentIsPaid: boolean) => {
         const newIsPaid = !currentIsPaid;
         try {
+            setIsLoading(true);
             const res = await fetch(`/api/history/${historyId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -130,9 +134,11 @@ const HistoryPage = () => {
                     detail: 'Trạng thái thanh toán đã được cập nhật.',
                     life: 4000
                 });
+                setIsLoading(false);
             }
         } catch (error) {
             console.error('Error updating payment:', error);
+            setIsLoading(false);
         }
     };
 
@@ -252,9 +258,10 @@ const HistoryPage = () => {
                                     setSelectedDate(e.value);
                                     setFirst(0);
                                 }}
+                                selectionMode="range"
                                 showIcon
                                 dateFormat="dd/mm/yy"
-                                placeholder="Lọc theo ngày"
+                                placeholder="Lọc theo khoảng ngày"
                                 maxDate={new Date()}
                                 showButtonBar
                             />
@@ -338,24 +345,48 @@ const HistoryPage = () => {
                                     </div>
 
                                     <div className="grid">
-                                        {item.participants?.map((p: any) => (
-                                            <div className="col-12 md:col-3" key={p.user?._id || p.user?.Name}>
-                                                <Button
-                                                    className="w-full p-3 flex flex-column"
-                                                    severity={p.isPaid ? 'success' : 'danger'}
-                                                    outlined
-                                                    onClick={(e) => {
-                                                        e.currentTarget.blur();
-                                                        handleTogglePaid(item._id, p.user._id, p.isPaid);
-                                                    }}
-                                                >
-                                                    <span className="font-bold">{p.user?.Name}</span>
-                                                    <span className="mt-2 font-semibold">
-                                                        {formatCurrency(p.amount)}
-                                                    </span>
-                                                </Button>
-                                            </div>
-                                        ))}
+                                        {item.participants?.map((p: any) => {
+                                            const isPaid = Boolean(p.isPaid);
+                                            const ownerConfirmed = Boolean(p.ownerConfirm);
+                                            let severity: 'success' | 'warning' | 'danger' = 'danger';
+                                            let disabled = false;
+
+                                            if (isPaid) {
+                                                if (ownerConfirmed) {
+                                                    severity = 'success';
+                                                    disabled = true;
+                                                } else {
+                                                    severity = 'warning';
+                                                    disabled = false;
+                                                }
+                                            } else {
+                                                severity = 'danger';
+                                                disabled = false;
+                                            }
+
+                                            return (
+                                                <div className="col-12 md:col-3" key={p.user?._id || p.user?.Name}>
+                                                    <Button
+                                                        className="w-full p-3 flex flex-column"
+                                                        severity={severity}
+                                                        outlined
+                                                        disabled={disabled}
+                                                        tooltip={disabled ? 'Đã xác nhận bởi người thanh toán' : undefined}
+                                                        tooltipOptions={{ position: 'top' }}
+                                                        onClick={(e) => {
+                                                            e.currentTarget.blur();
+                                                            if (disabled) return; // prevent toggling when owner confirmed
+                                                            handleTogglePaid(item._id, p.user._id, p.isPaid);
+                                                        }}
+                                                    >
+                                                        <span className="font-bold">{p.user?.Name}</span>
+                                                        <span className="mt-2 font-semibold">
+                                                            {formatCurrency(p.amount)}
+                                                        </span>
+                                                    </Button>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>

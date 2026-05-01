@@ -10,6 +10,7 @@ import { MultiSelect } from 'primereact/multiselect';
 import { AutoComplete, AutoCompleteCompleteEvent } from "primereact/autocomplete";
 import { Toast } from 'primereact/toast';
 import { useRef } from 'react';
+import { useSession } from 'next-auth/react';
 
 type Props = {
     visible: boolean;
@@ -19,6 +20,7 @@ type Props = {
 };
 
 export default function AddPaymentDialog({ visible, onHide, onSuccess, editData }: Props) {
+    const { data: session } = useSession();
     const toast = useRef<Toast>(null);
     const [date, setDate] = useState<Date | null>(new Date());
     const [type, setType] = useState('');
@@ -35,7 +37,7 @@ export default function AddPaymentDialog({ visible, onHide, onSuccess, editData 
     const [users, setUserName] = useState<string[]>([]);
     const [userType, setUser] = useState<any[]>([]);
 
-    const [participants, setParticipants] = useState<{ name: string, amount: number, error?: string }[]>([]);
+    const [participants, setParticipants] = useState<{ name: string, amount: number, error?: string, isPaid?: boolean, ownerConfirm?: boolean }[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
     const fetchFoodType = async () => {
@@ -87,7 +89,7 @@ export default function AddPaymentDialog({ visible, onHide, onSuccess, editData 
 
     useEffect(() => {
         if (visible && participants.length === 0) {
-            setParticipants([{ name: '', amount: 0 }]);
+            setParticipants([{ name: '', amount: 0, isPaid: false, ownerConfirm: false }]);
         }
     }, [visible]);
 
@@ -114,9 +116,12 @@ export default function AddPaymentDialog({ visible, onHide, onSuccess, editData 
             const participants = editData.participants?.map((p: any) => ({
                 name: (typeof p.user === 'object' && p.user?.Name) ? p.user.Name : '',
                 amount: p.amount,
-                error: ''
-            })) || [{ name: '', amount: 0 }];
+                error: '',
+                isPaid: p.isPaid,
+                ownerConfirm: p.ownerConfirm
+            })) || [{ name: '', amount: 0, isPaid: false, ownerConfirm: false }];
             setParticipants(participants);
+            debugger
         }
     }, [visible, editData]);
 
@@ -170,8 +175,9 @@ export default function AddPaymentDialog({ visible, onHide, onSuccess, editData 
                 foodType: (typeof foodValue === 'object' && foodValue?._id) ? foodValue._id : foodValue?.name || foodValue,
                 payer: userValue || payerName,
                 total,
-                participants: validParticipants.map(p => p.name),
-                amounts: Object.fromEntries(validParticipants.map(p => [p.name, p.amount]))
+                participants: validParticipants.map(p => ({ name: p.name, amount: p.amount, isPaid: p.isPaid, ownerConfirm: p.ownerConfirm })),
+                amounts: Object.fromEntries(validParticipants.map(p => [p.name, p.amount])),
+                auditUserId: (session?.user as any)?.id
             };
 
             const isEditing = !!editData?._id;
@@ -217,192 +223,192 @@ export default function AddPaymentDialog({ visible, onHide, onSuccess, editData 
 
     return (
         <>
-        <Dialog
-            header={editData?._id ? "Chỉnh sửa hóa đơn ăn chơi" : "Thêm hóa đơn ăn chơi"}
-            visible={visible}
-            style={{ width: '800px', overflow: 'visible' }}
-            onHide={handleHide}
-            modal
-            draggable={false}
-        >
-            <div className="grid">
-                {/* Date */}
-                <div className="field col-6">
-                    <label>Ngày ăn chơi</label>
-                    <Calendar
-                        value={date}
-                        onChange={(e) => setDate(e.value ?? null)}
-                        placeholder="mm/dd/yyyy"
-                        maxDate={new Date()}
-                        className="w-full"
-                    />
-                </div>
-
-                {/* Type */}
-                <div className="field col-6">
-                    <label>Dân chơi đã ăn gì?</label>
-                    <AutoComplete
-                        value={foodValue}
-                        suggestions={foods}
-                        completeMethod={searchFood}
-                        field="name"
-                        onChange={(e) => {
-                            // Handle both object selection and free text input
-                            if (typeof e.value === 'object' && e.value?.name) {
-                                setValue(e.value);
-                            } else if (typeof e.value === 'string' && e.value.trim()) {
-                                // User typed a new food type name
-                                setValue({ name: e.value, _id: null });
-                            } else {
-                                setValue(e.value);
-                            }
-                        }}
-                        itemTemplate={(item: any) => item?.name || item}
-                        placeholder="e.g. Lunch - Vietnamese"
-                        className="w-full"
-                        inputClassName="w-full"
-                        forceSelection={false}
-                    />
-                </div>
-
-                {/* Payer */}
-                <div className="field col-6">
-                    <label>Dân chơi thu họ</label>
-                    <AutoComplete
-                        value={payerName}
-                        suggestions={users}
-                        completeMethod={searchUser}
-                        field="Name"
-                        onChange={(e) => {
-                            if (typeof e.value === 'object' && e.value?._id) {
-                                setUserId(e.value._id);
-                                setPayerName(e.value.Name);
-                            } else {
-                                setUserId(e.value);
-                                setPayerName(e.value);
-                            }
-                        }}
-                        itemTemplate={(item: any) => item?.Name || item}
-                        placeholder="Ai nhỉ?"
-                        className="w-full"
-                        inputClassName="w-full"
-                    />
-                </div>
-
-                {/* Total */}
-                <div className="field col-6">
-                    <label>Tổng hóa đơn</label>
-                    <InputNumber
-                        value={total}
-                        onValueChange={(e) => setTotal(e.value || 0)}
-                        mode="currency"
-                        currency="VND"
-                        locale="vi-VN"
-                        className="w-full"
-                    />
-                </div>
-
-                {/* Participants */}
-                <div className="field col-12">
-                    <div className="flex justify-content-between align-items-center mb-2">
-                        <label className="mb-0">Dân chơi nào đã tham gia?</label>
-                        <div className="flex gap-2">
-                            {/* 💰 Chia đều */}
-                            <Button
-                                rounded
-                                icon="pi pi-calculator"
-                                text
-                                tooltip="Chia đều tiền"
-                                onClick={(e) => {
-                                    if (!total || !participants.length) return;
-
-                                    const numPeople = participants.length + 1; // payer + participants
-                                    const base = Math.floor(total / numPeople);
-                                    let remainder = total - base * numPeople;
-
-                                    setParticipants(prev =>
-                                        prev.map((p, index) => {
-                                            const extra = remainder > 0 ? 1 : 0;
-                                            if (remainder > 0) remainder--;
-
-                                            return {
-                                                ...p,
-                                                amount: base + extra,
-                                                error: ''
-                                            };
-                                        })
-                                    );
-                                    e.currentTarget.blur();
-                                }}
-                            />
-
-                            {/* ➕ Add */}
-                            <Button
-                                rounded
-                                icon="pi pi-plus"
-                                text
-                                tooltip="Thêm người tham gia"
-                                onClick={(e) => {
-                                    setParticipants(prev => [...prev, { name: '', amount: 0 }]);
-                                    e.currentTarget.blur();
-                                }}
-                            />
-                        </div>
+            <Dialog
+                header={editData?._id ? "Chỉnh sửa hóa đơn ăn chơi" : "Thêm hóa đơn ăn chơi"}
+                visible={visible}
+                style={{ width: '800px', overflow: 'visible' }}
+                onHide={handleHide}
+                modal
+                draggable={false}
+            >
+                <div className="grid">
+                    {/* Date */}
+                    <div className="field col-6">
+                        <label>Ngày ăn chơi</label>
+                        <Calendar
+                            value={date}
+                            onChange={(e) => setDate(e.value ?? null)}
+                            placeholder="mm/dd/yyyy"
+                            maxDate={new Date()}
+                            className="w-full"
+                        />
                     </div>
-                    {participants.map((p, index) => (
-                        <div key={index} className="flex align-items-start gap-2 mb-2">
-                            <div className="flex-1">
-                                <AutoComplete
-                                    value={p.name}
-                                    suggestions={users}
-                                    completeMethod={searchUser}
-                                    field="Name"
-                                    onChange={(e) => {
-                                        // Extract name from object or use string value
-                                        const selectedName = (typeof e.value === 'object' && e.value?.Name) ? e.value.Name : e.value;
-                                        const isDuplicate = participants.some((item, i) => i !== index && item.name === selectedName);
-                                        const isPayer = payerName && selectedName === payerName;
-                                        let error = '';
-                                        if (isDuplicate) error = 'Trùng tên';
-                                        else if (isPayer) error = 'Là người trả';
-                                        const newP = { ...p, name: selectedName, error };
-                                        if (selectedName === '') newP.amount = 0;
+
+                    {/* Type */}
+                    <div className="field col-6">
+                        <label>Dân chơi đã ăn gì?</label>
+                        <AutoComplete
+                            value={foodValue}
+                            suggestions={foods}
+                            completeMethod={searchFood}
+                            field="name"
+                            onChange={(e) => {
+                                // Handle both object selection and free text input
+                                if (typeof e.value === 'object' && e.value?.name) {
+                                    setValue(e.value);
+                                } else if (typeof e.value === 'string' && e.value.trim()) {
+                                    // User typed a new food type name
+                                    setValue({ name: e.value, _id: null });
+                                } else {
+                                    setValue(e.value);
+                                }
+                            }}
+                            itemTemplate={(item: any) => item?.name || item}
+                            placeholder="e.g. Lunch - Vietnamese"
+                            className="w-full"
+                            inputClassName="w-full"
+                            forceSelection={false}
+                        />
+                    </div>
+
+                    {/* Payer */}
+                    <div className="field col-6">
+                        <label>Dân chơi thu họ</label>
+                        <AutoComplete
+                            value={payerName}
+                            suggestions={users}
+                            completeMethod={searchUser}
+                            field="Name"
+                            onChange={(e) => {
+                                if (typeof e.value === 'object' && e.value?._id) {
+                                    setUserId(e.value._id);
+                                    setPayerName(e.value.Name);
+                                } else {
+                                    setUserId(e.value);
+                                    setPayerName(e.value);
+                                }
+                            }}
+                            itemTemplate={(item: any) => item?.Name || item}
+                            placeholder="Ai nhỉ?"
+                            className="w-full"
+                            inputClassName="w-full"
+                        />
+                    </div>
+
+                    {/* Total */}
+                    <div className="field col-6">
+                        <label>Tổng hóa đơn</label>
+                        <InputNumber
+                            value={total}
+                            onValueChange={(e) => setTotal(e.value || 0)}
+                            mode="currency"
+                            currency="VND"
+                            locale="vi-VN"
+                            className="w-full"
+                        />
+                    </div>
+
+                    {/* Participants */}
+                    <div className="field col-12">
+                        <div className="flex justify-content-between align-items-center mb-2">
+                            <label className="mb-0">Dân chơi nào đã tham gia?</label>
+                            <div className="flex gap-2">
+                                {/* 💰 Chia đều */}
+                                <Button
+                                    rounded
+                                    icon="pi pi-calculator"
+                                    text
+                                    tooltip="Chia đều tiền"
+                                    onClick={(e) => {
+                                        if (!total || !participants.length) return;
+
+                                        const numPeople = participants.length + 1; // payer + participants
+                                        const base = Math.floor(total / numPeople);
+                                        let remainder = total - base * numPeople;
+
+                                        setParticipants(prev =>
+                                            prev.map((p, index) => {
+                                                const extra = remainder > 0 ? 1 : 0;
+                                                if (remainder > 0) remainder--;
+
+                                                return {
+                                                    ...p,
+                                                    amount: base + extra,
+                                                    error: ''
+                                                };
+                                            })
+                                        );
+                                        e.currentTarget.blur();
+                                    }}
+                                />
+
+                                {/* ➕ Add */}
+                                <Button
+                                    rounded
+                                    icon="pi pi-plus"
+                                    text
+                                    tooltip="Thêm người tham gia"
+                                    onClick={(e) => {
+                                        setParticipants(prev => [...prev, { name: '', amount: 0 }]);
+                                        e.currentTarget.blur();
+                                    }}
+                                />
+                            </div>
+                        </div>
+                        {participants.map((p, index) => (
+                            <div key={index} className="flex align-items-start gap-2 mb-2">
+                                <div className="flex-1">
+                                    <AutoComplete
+                                        value={p.name}
+                                        suggestions={users}
+                                        completeMethod={searchUser}
+                                        field="Name"
+                                        onChange={(e) => {
+                                            // Extract name from object or use string value
+                                            const selectedName = (typeof e.value === 'object' && e.value?.Name) ? e.value.Name : e.value;
+                                            const isDuplicate = participants.some((item, i) => i !== index && item.name === selectedName);
+                                            const isPayer = payerName && selectedName === payerName;
+                                            let error = '';
+                                            if (isDuplicate) error = 'Trùng tên';
+                                            else if (isPayer) error = 'Là người trả';
+                                            const newP = { ...p, name: selectedName, error };
+                                            if (selectedName === '') newP.amount = 0;
+                                            setParticipants(prev => prev.map((item, i) => i === index ? newP : item));
+                                        }}
+                                        itemTemplate={(item: any) => item?.Name || item}
+                                        placeholder="Chọn thành viên"
+                                        className="w-full"
+                                        inputClassName={`w-full ${p.error ? 'p-invalid' : ''}`}
+                                    />
+                                    {p.error && <small className="p-error block mt-1">{p.error}</small>}
+                                </div>
+                                <InputNumber
+                                    value={p.amount}
+                                    onValueChange={(e) => {
+                                        const newP = { ...p, amount: e.value || 0, isPaid: false, ownerConfirm: false };
                                         setParticipants(prev => prev.map((item, i) => i === index ? newP : item));
                                     }}
-                                    itemTemplate={(item: any) => item?.Name || item}
-                                    placeholder="Chọn thành viên"
-                                    className="w-full"
-                                    inputClassName={`w-full ${p.error ? 'p-invalid' : ''}`}
+                                    mode="currency"
+                                    currency="VND"
+                                    locale="vi-VN"
+                                    className="flex-1"
+                                    inputClassName={p.error ? 'p-invalid' : ''}
                                 />
-                                {p.error && <small className="p-error block mt-1">{p.error}</small>}
+                                <Button icon="pi pi-trash" text rounded severity="danger" disabled={participants.length <= 1} onClick={(e) => {
+                                    setParticipants(prev => prev.filter((_, i) => i !== index));
+                                    (e.currentTarget as HTMLButtonElement).blur();
+                                }} />
                             </div>
-                            <InputNumber
-                                value={p.amount}
-                                onValueChange={(e) => {
-                                    const newP = { ...p, amount: e.value || 0 };
-                                    setParticipants(prev => prev.map((item, i) => i === index ? newP : item));
-                                }}
-                                mode="currency"
-                                currency="VND"
-                                locale="vi-VN"
-                                className="flex-1"
-                                inputClassName={p.error ? 'p-invalid' : ''}
-                            />
-                            <Button icon="pi pi-trash" text rounded severity="danger" disabled={participants.length <= 1} onClick={(e) => {
-                                setParticipants(prev => prev.filter((_, i) => i !== index));
-                                (e.currentTarget as HTMLButtonElement).blur();
-                            }} />
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
-            </div>
 
-            {/* Footer */}
-            <div className="flex justify-content-between mt-4 gap-2 flex-wrap">
-                <Button label="Cancel" severity="danger" outlined onClick={onHide} disabled={isLoading} />
-                <Button label={editData?._id ? "Cập nhật" : "Lên nhạc"} severity="success" onClick={handleSubmit} loading={isLoading} disabled={isLoading} />
-            </div>
-        </Dialog>
-        <Toast ref={toast} />
-    </>);
+                {/* Footer */}
+                <div className="flex justify-content-between mt-4 gap-2 flex-wrap">
+                    <Button label="Cancel" severity="danger" outlined onClick={onHide} disabled={isLoading} />
+                    <Button label={editData?._id ? "Cập nhật" : "Lên nhạc"} severity="success" onClick={handleSubmit} loading={isLoading} disabled={isLoading} />
+                </div>
+            </Dialog>
+            <Toast ref={toast} />
+        </>);
 }

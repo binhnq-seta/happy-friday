@@ -15,7 +15,7 @@ const AppMenu = () => {
             label: 'Tính năng',
             items: [
                 { label: 'Lịch sử ăn chơi', icon: 'pi pi-fw pi-home', to: '/pages/history' },
-                { label: 'Xem nợ (To be continued)', icon: 'pi pi-fw pi-money-bill', to: '#' },
+                { label: 'Cá nhân', icon: 'pi pi-fw pi-user', to: '/pages/personal' },
             ]
         },
         {

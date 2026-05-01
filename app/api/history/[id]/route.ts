@@ -11,7 +11,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         const { id } = params;
 
         const body = await request.json();
-        const { date, foodType, payer, total, participants, amounts } = body;
+        const { date, foodType, payer, total, participants, amounts, auditUserId } = body;
 
         // Validate required fields
         if (!date || !foodType || !payer || !total) {
@@ -87,14 +87,13 @@ export async function PUT(request: Request, { params }: { params: { id: string }
                 { status: 400 }
             );
         }
-
         // Process participants
         const participantsList = [];
         if (Array.isArray(participants) && participants.length > 0) {
             for (const participant of participants) {
                 let participantUser = null;
                 let participantName = null;
-                
+
                 // Check if participant is an object with _id (from frontend)
                 if (typeof participant === 'object' && participant._id) {
                     participantUser = await User.findById(participant._id);
@@ -103,32 +102,40 @@ export async function PUT(request: Request, { params }: { params: { id: string }
                     // participant is a name string
                     participantUser = await User.findOne({ Name: participant });
                     participantName = participant;
-                } else if (typeof participant === 'object' && participant.Name) {
-                    // participant is an object with Name property
-                    participantUser = await User.findOne({ Name: participant.Name });
-                    participantName = participant.Name;
+                } else if (typeof participant === 'object' && (participant.Name || participant.name)) {
+                    // participant is an object with Name or name property (both cases)
+                    const pName = participant.Name || participant.name;
+                    participantUser = await User.findOne({ Name: pName });
+                    participantName = pName;
                 }
-                
+
                 // Create participant if not found
                 if (!participantUser && participantName) {
                     participantUser = await User.create({ Name: participantName, isActive: true });
                 }
-                
+
                 if (participantUser) {
-                    // Get the amount - handle both object and string keys
+                    // Get the amount - prefer participant.amount if provided (object), else use amounts map
                     let amount = 0;
-                    if (amounts) {
+                    if (typeof participant === 'object' && (participant.amount || participant.amount === 0)) {
+                        amount = Number(participant.amount || 0);
+                    } else if (amounts) {
                         if (participantName) {
                             amount = amounts[participantName] || 0;
                         } else if (typeof participant === 'string') {
                             amount = amounts[participant] || 0;
                         }
                     }
-                    
+
+                    // Preserve isPaid/ownerConfirm if provided in participant object, otherwise default to false
+                    const isPaidFlag = typeof participant === 'object' && 'isPaid' in participant ? Boolean(participant.isPaid) : false;
+                    const ownerConfirmFlag = typeof participant === 'object' && 'ownerConfirm' in participant ? Boolean(participant.ownerConfirm) : false;
+
                     participantsList.push({
                         user: participantUser._id,
                         amount: amount,
-                        isPaid: false
+                        isPaid: isPaidFlag,
+                        ownerConfirm: ownerConfirmFlag
                     });
                 }
             }
@@ -143,7 +150,10 @@ export async function PUT(request: Request, { params }: { params: { id: string }
                 foodType: foodTypeDoc._id,
                 total: Number(total),
                 participants: participantsList,
-                isPaid: false
+                // Only mark the history as paid when every participant has both paid and been owner-confirmed
+                isPaid: participantsList.length > 0 && participantsList.every((p: any) => Boolean(p.isPaid) && Boolean(p.ownerConfirm)),
+                updatedBy: auditUserId || payerUser._id,
+                updatedOn: new Date()
             },
             { returnDocument: 'after' }
         )
@@ -179,7 +189,7 @@ export async function PATCH(
 
     const { id } = params;
     const body = await request.json();
-    const { participantUserId, isPaid } = body;
+    const { participantUserId, isPaid, ownerConfirm, auditUserId } = body;
 
     if (!participantUserId) {
         return NextResponse.json(
@@ -209,8 +219,18 @@ export async function PATCH(
             );
         }
 
-        participant.isPaid = Boolean(isPaid);
-        historyDoc.isPaid = historyDoc.participants.every((p: any) => p.isPaid);
+        if (typeof isPaid === 'boolean') {
+            participant.isPaid = isPaid;
+        }
+
+        if (typeof ownerConfirm === 'boolean') {
+            participant.ownerConfirm = ownerConfirm;
+        }
+
+        // Only mark history as paid when every participant has both paid and ownerConfirmed
+        historyDoc.isPaid = historyDoc.participants.every((p: any) => Boolean(p.isPaid) && Boolean(p.ownerConfirm));
+        historyDoc.updatedBy = auditUserId || historyDoc.updatedBy;
+        historyDoc.updatedOn = new Date();
 
         const updatedHistory = await historyDoc.save();
         const populatedHistory = await History.findById(updatedHistory._id)

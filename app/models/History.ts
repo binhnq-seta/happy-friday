@@ -13,7 +13,8 @@ const HistorySchema = new mongoose.Schema({
                 ref: 'User'
             },
             amount: Number,
-            isPaid: Boolean
+            isPaid: Boolean,
+            ownerConfirm: Boolean
         }
     ],
     total: Number,
@@ -21,7 +22,11 @@ const HistorySchema = new mongoose.Schema({
     foodType: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'FoodType'
-    }
+    },
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    createdOn: { type: Date, default: Date.now },
+    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    updatedOn: { type: Date, default: Date.now },
 });
 
 export default mongoose.models.History || mongoose.model('History', HistorySchema);

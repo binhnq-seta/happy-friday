@@ -5,7 +5,7 @@ import { connectDB } from '@/app/database/mongodb';
 import User from '@/app/models/User';
 import bcrypt from "bcryptjs";
 
-const handler = NextAuth({
+export const authOptions = {
     providers: [
         GoogleProvider({
             clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -72,9 +72,22 @@ const handler = NextAuth({
             return true;
         },
         async session({ session, token }) {
+            if (session.user) {
+                session.user.id = (token as any).id || token.sub;
+            }
             return session;
         },
         async jwt({ token, user, trigger, session }) {
+            if (user?.email) {
+                await connectDB();
+                const dbUser = await User.findOne({ email: user.email.toLowerCase() });
+                if (dbUser?._id) {
+                    (token as any).id = dbUser._id.toString();
+                }
+            } else if (user) {
+                (token as any).id = (user as any).id;
+            }
+
             if (trigger === "update" && session) {
                 token.name = session.name;
                 token.email = session.email;
@@ -85,6 +98,8 @@ const handler = NextAuth({
     pages: {
         signIn: '/pages/authen/login',
     }
-});
+};
+
+const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };
