@@ -31,6 +31,7 @@ const PersonalPage = () => {
     const [isDeleting, setIsDeleting] = useState(false);
     const [qrImageUrl, setQrImageUrl] = useState<string>('');
     const [qrLoading, setQrLoading] = useState(false);
+    const [markPaidLoading, setMarkPaidLoading] = useState(false);
     const [selectedDebtIds, setSelectedDebtIds] = useState<string[]>([]);
     const [qrMemo, setQrMemo] = useState<string>('THANH TOAN TIEN AN CHOI');
     const [first, setFirst] = useState(0);
@@ -429,6 +430,85 @@ const PersonalPage = () => {
             });
         } finally {
             setQrLoading(false);
+        }
+    };
+
+    const handleMarkSelectedDebtsAsPaid = async () => {
+        const participantUserId = (session?.user as any)?.id;
+
+        if (!participantUserId) {
+            toast.current?.show({
+                severity: 'warn',
+                summary: 'Chưa đăng nhập',
+                detail: 'Không xác định được người dùng hiện tại để cập nhật trạng thái thanh toán.',
+                life: 4000
+            });
+            return;
+        }
+
+        if (selectedDebtIds.length === 0) {
+            toast.current?.show({
+                severity: 'warn',
+                summary: 'Chưa chọn khoản nợ',
+                detail: 'Vui lòng chọn ít nhất một khoản nợ trước khi xác nhận đã thanh toán.',
+                life: 3500
+            });
+            return;
+        }
+
+        setMarkPaidLoading(true);
+
+        try {
+            const results = await Promise.all(
+                selectedDebtIds.map((debtId) =>
+                    fetch(`/api/history/${debtId}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            participantUserId,
+                            isPaid: true,
+                            auditUserId: participantUserId
+                        })
+                    })
+                )
+            );
+
+            const successCount = results.filter((res) => res.ok).length;
+
+            if (successCount > 0) {
+                await fetchHistory();
+                toast.current?.show({
+                    severity: 'success',
+                    summary: 'Đã cập nhật',
+                    detail: `Đã đánh dấu ${successCount} khoản thanh toán thành công.`,
+                    life: 4000
+                });
+            }
+
+            if (successCount < selectedDebtIds.length) {
+                toast.current?.show({
+                    severity: 'warn',
+                    summary: 'Cập nhật chưa đủ',
+                    detail: `Có ${selectedDebtIds.length - successCount} khoản chưa cập nhật được.`,
+                    life: 4000
+                });
+            }
+
+            setVisible(false);
+            setSelectedHistory(null);
+            setQrImageUrl('');
+            setSelectedDebtIds([]);
+            setQrMemo('THANH TOAN TIEN AN CHOI');
+        } catch (error) {
+            console.error('Error marking selected debts as paid:', error);
+            toast.current?.show({
+                severity: 'error',
+                summary: 'Lỗi',
+                detail: 'Không thể cập nhật trạng thái đã thanh toán.',
+                life: 4000
+            });
+        } finally {
+            setMarkPaidLoading(false);
         }
     };
 
@@ -920,7 +1000,17 @@ const PersonalPage = () => {
 
                     <div className="text-center">
                         {qrImageUrl ? (
-                            <img src={qrImageUrl} alt="QR Thanh Toan" style={{ width: '100%', maxWidth: '320px' }} />
+                            <div className="flex flex-column align-items-center gap-3">
+                                <img src={qrImageUrl} alt="QR Thanh Toan" style={{ width: '100%', maxWidth: '320px' }} />
+                                <Button
+                                    label="Đã thanh toán"
+                                    icon="pi pi-check"
+                                    severity="success"
+                                    onClick={handleMarkSelectedDebtsAsPaid}
+                                    disabled={markPaidLoading}
+                                    loading={markPaidLoading}
+                                />
+                            </div>
                         ) : (
                             <div className="text-500">Chọn khoản nợ và bấm Tạo mã QR.</div>
                         )}
